@@ -1,0 +1,490 @@
+main.py
+import pygame
+import random
+import time
+from constants import *
+from board import Board
+from agents.minmax_ai import AIPlayer
+from agents.mcts import MCTSPlayer
+
+NUM_GAMES = 1
+ROWS, COLS = 1, 1
+SUB_WIDTH = WIDTH // COLS
+SUB_HEIGHT = HEIGHT // ROWS
+
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Parallel Checkers")
+
+class GameInstance:
+    def __init__(self, x_idx, y_idx):
+        self.x_idx = x_idx
+        self.y_idx = y_idx
+        self.reset()
+
+    def reset(self):
+        self.board = Board()
+        self.white_ai = AIPlayer("w", depth=3)
+        self.black_ai = MCTSPlayer("b", simulations=500)
+        self.current_turn = random.choice(["w", "b"])
+        self.finished = False
+        self.winner = None
+        self.start_time = time.time()
+        self.last_move = None
+
+    def update(self):
+        if self.finished:
+            return
+
+        move = None
+        if self.current_turn == "w":
+            move = self.white_ai.get_move(self.board)
+        else:
+            move = self.black_ai.get_move(self.board)
+
+        if move:
+            jumped, _ = self.board.move_piece(*move)
+            self.last_move = move
+            self.current_turn = "b" if self.current_turn == "w" else "w"
+        else:
+            self.finished = True
+            self.winner = "Black" if self.current_turn == "w" else "White"
+
+    def draw(self, win):
+        surface = pygame.Surface((SUB_WIDTH, SUB_HEIGHT))
+        self.board.draw(surface, last_move=self.last_move)
+
+        if self.finished:
+            overlay = pygame.Surface((SUB_WIDTH, SUB_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            surface.blit(overlay, (0, 0))
+
+            font = pygame.font.SysFont("arial", 24, bold=True)
+            text = font.render(f"{self.winner} wins!", True, (255, 255, 255))
+            text_rect = text.get_rect(center=(SUB_WIDTH // 2, SUB_HEIGHT // 2))
+            surface.blit(text, text_rect)
+
+        pygame.draw.rect(surface, (200, 200, 200), surface.get_rect(), 2)
+        win.blit(surface, (self.x_idx * SUB_WIDTH, self.y_idx * SUB_HEIGHT))
+
+def main():
+    pygame.init()
+    clock = pygame.time.Clock()
+    games = []
+
+    for i in range(NUM_GAMES):
+        x = i % COLS
+        y = i // COLS
+        games.append(GameInstance(x, y))
+
+    run = True
+    while run:
+        clock.tick(20)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+
+        all_finished = True
+        WIN.fill((0, 0, 0))
+
+        for game in games:
+            if not game.finished and (time.time() - game.start_time > 90):
+                game.reset()
+
+            game.update()
+            game.draw(WIN)
+
+            if not game.finished:
+                all_finished = False
+
+        pygame.display.update()
+
+        if all_finished:
+            pygame.time.wait(1000)
+            run = False
+
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
+
+board.py
+import pygame
+import math
+from constants import *
+
+class Board:
+    def __init__(self):
+        self.board = []
+        self.last_move = None
+        self.create_board()
+
+    def create_board(self):
+        for row in range(ROWS):
+            self.board.append([])
+            for col in range(COLS):
+                if row in [1, 2]:
+                    self.board[row].append("b")
+                elif row in [5, 6]:
+                    self.board[row].append("w")
+                else:
+                    self.board[row].append(0)
+
+    def draw(self, surface, last_move=None):
+        if last_move is None:
+            last_move = self.last_move
+        height, width = surface.get_height(), surface.get_width()
+        square_size = min(width, height) // ROWS
+
+        surface.fill(DARK_BROWN)
+        for row in range(ROWS):
+            for col in range(row % 2, COLS, 2):
+                pygame.draw.rect(surface, LIGHT_BROWN,
+                                 (col * square_size, row * square_size, square_size, square_size))
+
+        for row in range(ROWS):
+            for col in range(COLS):
+                piece = self.board[row][col]
+                if piece != 0:
+                    color = BLACK if piece.lower() == "b" else WHITE
+                    center = (col * square_size + square_size // 2, row * square_size + square_size // 2)
+                    radius = square_size // 2 - 4
+                    pygame.draw.circle(surface, color, center, radius)
+
+                    if piece.isupper():
+                        font = pygame.font.SysFont(None, square_size // 2)
+                        text_color = WHITE if color == BLACK else BLACK
+                        text = font.render("K", True, text_color)
+                        surface.blit(text, (center[0] - text.get_width() // 2,
+                                            center[1] - text.get_height() // 2))
+
+        # Son hamleyi gösteren yön oku
+        if last_move:
+            sr, sc = last_move[0]
+            er, ec = last_move[1]
+            start_pos = (sc * square_size + square_size // 2, sr * square_size + square_size // 2)
+            end_pos = (ec * square_size + square_size // 2, er * square_size + square_size // 2)
+
+            arrow_color = (255, 0, 0)
+            pygame.draw.line(surface, arrow_color, start_pos, end_pos, 3)
+
+            dx, dy = end_pos[0] - start_pos[0], end_pos[1] - start_pos[1]
+            angle = math.atan2(dy, dx)
+            arrow_length = 12
+            tip = end_pos
+            left = (tip[0] - arrow_length * math.cos(angle - math.pi / 6),
+                    tip[1] - arrow_length * math.sin(angle - math.pi / 6))
+            right = (tip[0] - arrow_length * math.cos(angle + math.pi / 6),
+                     tip[1] - arrow_length * math.sin(angle + math.pi / 6))
+            pygame.draw.polygon(surface, arrow_color, [tip, left, right])
+
+    def is_within_bounds(self, row, col):
+        return 0 <= row < 8 and 0 <= col < 8
+
+    def get_valid_moves(self, row, col, only_captures=False):
+        moves = []
+        piece = self.board[row][col]
+        if piece == 0:
+            return moves
+
+        if piece.isupper():
+            directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            for dr, dc in directions:
+                jumped = False
+                r, c = row + dr, col + dc
+                while self.is_within_bounds(r, c):
+                    target = self.board[r][c]
+                    if target == 0 and not jumped:
+                        if not only_captures:
+                            moves.append((r, c))
+                    elif target != 0 and target.lower() != piece.lower() and not jumped:
+                        jumped = True
+                    elif target == 0 and jumped:
+                        moves.append((r, c))
+                        break
+                    else:
+                        break
+                    r += dr
+                    c += dc
+        else:
+            directions = [(-1, 0), (0, -1), (0, 1)] if piece == "w" else [(1, 0), (0, -1), (0, 1)]
+            for dr, dc in directions:
+                new_row, new_col = row + dr, col + dc
+                if self.is_within_bounds(new_row, new_col):
+                    target = self.board[new_row][new_col]
+                    if target == 0 and not only_captures:
+                        moves.append((new_row, new_col))
+                    elif target != 0 and target.lower() != piece.lower():
+                        jump_row, jump_col = new_row + dr, new_col + dc
+                        if self.is_within_bounds(jump_row, jump_col) and self.board[jump_row][jump_col] == 0:
+                            moves.append((jump_row, jump_col))
+        return moves
+
+    def get_all_moves(self, color):
+        all_moves = []
+        must_jump = []
+
+        for row in range(ROWS):
+            for col in range(COLS):
+                if self.board[row][col] != 0 and self.board[row][col].lower() == color:
+                    captures = self.get_valid_moves(row, col, only_captures=True)
+                    if captures:
+                        for move in captures:
+                            must_jump.append(((row, col), move))
+                    else:
+                        moves = self.get_valid_moves(row, col)
+                        for move in moves:
+                            all_moves.append(((row, col), move))
+
+        return must_jump if must_jump else all_moves
+
+    def move_piece(self, start, end):
+        sr, sc = start
+        er, ec = end
+        piece = self.board[sr][sc]
+        self.board[sr][sc] = 0
+        self.board[er][ec] = piece
+        self.last_move = ((sr, sc), (er, ec))
+
+        jumped = False
+        if abs(er - sr) > 1 or abs(ec - sc) > 1:
+            jumped = True
+            dr = (er - sr) // max(1, abs(er - sr)) if er != sr else 0
+            dc = (ec - sc) // max(1, abs(ec - sc)) if ec != sc else 0
+            r, c = sr + dr, sc + dc
+            while r != er or c != ec:
+                if self.board[r][c] != 0 and self.board[r][c].lower() != piece.lower():
+                    self.board[r][c] = 0
+                    break
+                r += dr
+                c += dc
+
+        if piece == "w" and er == 0:
+            self.board[er][ec] = "W"
+        elif piece == "b" and er == 7:
+            self.board[er][ec] = "B"
+
+        # Çoklu yeme devamı
+        while jumped:
+            more_jumps = self.get_valid_moves(er, ec, only_captures=True)
+            if not more_jumps:
+                break
+            next_r, next_c = more_jumps[0]
+            sr, sc = er, ec
+            er, ec = next_r, next_c
+            self.board[sr][sc] = 0
+            self.board[er][ec] = piece
+            dr = (er - sr) // max(1, abs(er - sr)) if er != sr else 0
+            dc = (ec - sc) // max(1, abs(ec - sc)) if ec != sc else 0
+            r, c = sr + dr, sc + dc
+            while r != er or c != ec:
+                if self.board[r][c] != 0 and self.board[r][c].lower() != piece.lower():
+                    self.board[r][c] = 0
+                    break
+                r += dr
+                c += dc
+            if piece == "w" and er == 0:
+                self.board[er][ec] = "W"
+            elif piece == "b" and er == 7:
+                self.board[er][ec] = "B"
+
+        return jumped, (er, ec)
+
+    def check_winner(self):
+        whites = [p for row in self.board for p in row if p != 0 and p.lower() == 'w']
+        blacks = [p for row in self.board for p in row if p != 0 and p.lower() == 'b']
+
+        white_moves = any(self.get_valid_moves(row, col)
+                          for row in range(ROWS) for col in range(COLS)
+                          if self.board[row][col] != 0 and self.board[row][col].lower() == 'w')
+        black_moves = any(self.get_valid_moves(row, col)
+                          for row in range(ROWS) for col in range(COLS)
+                          if self.board[row][col] != 0 and self.board[row][col].lower() == 'b')
+
+        if not whites or not white_moves:
+            return "b"
+        if not blacks or not black_moves:
+            return "w"
+
+        return None
+
+minmax_ai.py
+import copy
+import math
+
+class AIPlayer:
+    def __init__(self, color, depth=3):
+        self.color = color
+        self.depth = depth
+
+    def get_move(self, board):
+        best_score, best_move = self.minimax(board, self.depth, True)
+        if best_move:
+            # Çoklu hamle zincirini sürdür
+            sr, sc = best_move[0]
+            er, ec = best_move[1]
+            temp_board = copy.deepcopy(board)
+            jumped, (new_r, new_c) = temp_board.move_piece((sr, sc), (er, ec))
+            if jumped:
+                while True:
+                    more_jumps = temp_board.get_valid_moves(new_r, new_c, only_captures=True)
+                    if not more_jumps:
+                        break
+                    # İlkini otomatik al, strateji geliştirmek istenirse burası değiştirilebilir
+                    jump_to = more_jumps[0]
+                    temp_board.move_piece((new_r, new_c), jump_to)
+                    new_r, new_c = jump_to
+            return ((sr, sc), (er, ec))
+        return None
+
+
+    def minimax(self, board, depth, maximizing_player):
+        winner = board.check_winner()
+        if depth == 0 or winner is not None:
+            return self.evaluate(board), None
+
+        color = self.color if maximizing_player else ("b" if self.color == "w" else "w")
+        best_move = None
+
+        if maximizing_player:
+            max_eval = -math.inf
+            for move in board.get_all_moves(color):
+                temp_board = copy.deepcopy(board)
+                temp_board.move_piece(*move)
+                eval_score, _ = self.minimax(temp_board, depth - 1, False)
+                if eval_score > max_eval:
+                    max_eval = eval_score
+                    best_move = move
+            return max_eval, best_move
+        else:
+            min_eval = math.inf
+            for move in board.get_all_moves(color):
+                temp_board = copy.deepcopy(board)
+                temp_board.move_piece(*move)
+                eval_score, _ = self.minimax(temp_board, depth - 1, True)
+                if eval_score < min_eval:
+                    min_eval = eval_score
+                    best_move = move
+            return min_eval, best_move
+
+    def evaluate(self, board):
+        score = 0
+        for row in board.board:
+            for piece in row:
+                if piece != 0:
+                    if piece.lower() == self.color:
+                        score += 3 if piece.isupper() else 1
+                    else:
+                        score -= 3 if piece.isupper() else 1
+        return score
+
+mcts.py
+import copy
+import random
+import math
+
+class MCTSNode:
+    def __init__(self, board, color, parent=None, move=None):
+        self.board = board                      # Game state
+        self.color = color                      # Who's to move at this node
+        self.parent = parent                    # Parent node
+        self.move = move                        # Move that led to this node
+        self.children = []                      # Child nodes
+        self.visits = 0                         # Visit count
+        self.wins = 0                           # Win count
+
+    def get_untried_moves(self):
+        """Returns legal moves from this node's state that have not yet been explored."""
+        all_moves = self.board.get_all_moves(self.color)
+        tried_moves = [child.move for child in self.children]
+        return [move for move in all_moves if move not in tried_moves]
+
+    def is_fully_expanded(self):
+        """True if all possible moves have been tried (i.e., node is fully expanded)."""
+        return len(self.get_untried_moves()) == 0
+
+    def best_child(self, c_param=1.4):
+        """Selects child with highest UCB1 score."""
+        choices_weights = [
+            (child.wins / child.visits) + c_param * math.sqrt((2 * math.log(self.visits) / child.visits))
+            for child in self.children
+        ]
+        return self.children[choices_weights.index(max(choices_weights))]
+
+class MCTSPlayer:
+    def __init__(self, color, simulations=100, exploration_constant=1.4):
+        self.color = color
+        self.simulations = simulations
+        self.c_param = exploration_constant
+
+    def get_move(self, board):
+        root = MCTSNode(copy.deepcopy(board), self.color)
+
+        for _ in range(self.simulations):
+            node = root
+
+            # --- Selection ---
+            while node.children and node.is_fully_expanded():
+                node = node.best_child(self.c_param)
+
+            # --- Expansion ---
+            untried_moves = node.get_untried_moves()
+            if untried_moves:
+                move = random.choice(untried_moves)
+                temp_board = copy.deepcopy(node.board)
+                temp_board.move_piece(*move)
+                next_color = "b" if node.color == "w" else "w"
+                child = MCTSNode(temp_board, next_color, parent=node, move=move)
+                node.children.append(child)
+                node = child
+
+            # --- Simulation ---
+            winner = self.simulate_random_game(node.board, node.color)
+
+            # --- Backpropagation ---
+            self.backpropagate(node, winner)
+
+        # Choose the child with the most visits as the final move
+        if not root.children:
+            return None
+
+        best_move = max(root.children, key=lambda c: c.visits).move
+        return best_move
+
+    def simulate_random_game(self, board, color):
+        temp_board = copy.deepcopy(board)
+        current_color = color
+
+        while True:
+            winner = temp_board.check_winner()
+            if winner is not None:
+                return winner
+
+            moves = temp_board.get_all_moves(current_color)
+            if not moves:
+                return "b" if current_color == "w" else "w"
+
+            move = random.choice(moves)
+            jumped, (r, c) = temp_board.move_piece(*move)
+
+            if jumped:
+                while True:
+                    more_jumps = temp_board.get_valid_moves(r, c, only_captures=True)
+                    if not more_jumps:
+                        break
+                    jump_to = random.choice(more_jumps)
+                    jumped, (r, c) = temp_board.move_piece((r, c), jump_to)
+
+            current_color = "b" if current_color == "w" else "w"
+
+
+    def backpropagate(self, node, winner):
+        """Propagate the result up to the root node."""
+        while node is not None:
+            node.visits += 1
+            if winner == self.color:
+                node.wins += 1
+            # Optional: handle draws if your game supports them
+            # elif winner == "draw":
+            #     node.wins += 0.5
+            node = node.parent
