@@ -16,17 +16,17 @@ WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Parallel Checkers")
 
 class GameInstance:
-    def __init__(self, x_idx, y_idx, minimax_depth=3, mcts_simulations=500):
+    def __init__(self, x_idx, y_idx, white_ai, black_ai):
         self.x_idx = x_idx
         self.y_idx = y_idx
-        self.minimax_depth = minimax_depth
-        self.mcts_simulations = mcts_simulations
+        self.white_ai_class = white_ai
+        self.black_ai_class = black_ai
         self.reset()
 
     def reset(self):
         self.board = Board()
-        self.white_ai = MINMAXPlayer("w", depth=self.minimax_depth)
-        self.black_ai = MCTSPlayer("b", simulations=self.mcts_simulations)
+        self.white_ai = self.white_ai_class()
+        self.black_ai = self.black_ai_class()
         self.current_turn = random.choice(["w", "b"])
         self.finished = False
         self.winner = None
@@ -47,6 +47,7 @@ class GameInstance:
             jumped, _ = self.board.move_piece(*move)
             self.last_move = self.board.last_move
             self.current_turn = "b" if self.current_turn == "w" else "w"
+            time.sleep(0.3)
         else:
             self.finished = True
             self.winner = "Black" if self.current_turn == "w" else "White"
@@ -69,14 +70,27 @@ class GameInstance:
         turn_text = font.render(f"Turn: {'White' if self.current_turn == 'w' else 'Black'}", True, (255, 255, 255))
         surface.blit(turn_text, (10, 10))
         
+        time_left = max(0, int(90 - (time.time() - self.start_time)))
+        timer_text = font.render(f"Reset in: {time_left}s", True, (255, 255, 100))
+        surface.blit(timer_text, (10, 35))
+
         pygame.draw.rect(surface, (200, 200, 200), surface.get_rect(), 2)
         win.blit(surface, (self.x_idx * SUB_WIDTH, self.y_idx * SUB_HEIGHT))
     
 
 def main():
     params = show_ai_menu()
-    minimax_depth = params["minimax_depth"]
-    mcts_simulations = params["mcts_simulations"]
+
+    if params["white_type"] == "Minimax":
+        white_ai_factory = lambda: MINMAXPlayer("w", depth=params["white_depth"])
+    else:
+        white_ai_factory = lambda: MCTSPlayer("w", simulations=params["white_simulations"])
+
+    if params["black_type"] == "Minimax":
+        black_ai_factory = lambda: MINMAXPlayer("b", depth=params["black_depth"])
+    else:
+        black_ai_factory = lambda: MCTSPlayer("b", simulations=params["black_simulations"])
+
     num_games = params["num_games"]
 
     global NUM_GAMES, ROWS, COLS, SUB_WIDTH, SUB_HEIGHT
@@ -85,7 +99,6 @@ def main():
     SUB_WIDTH = WIDTH // COLS
     SUB_HEIGHT = HEIGHT // ROWS
 
-
     pygame.init()
     clock = pygame.time.Clock()
     games = []
@@ -93,7 +106,7 @@ def main():
     for i in range(NUM_GAMES):
         x = i % COLS
         y = i // COLS
-        game = GameInstance(x, y, minimax_depth, mcts_simulations)
+        game = GameInstance(x, y, white_ai_factory, black_ai_factory)
         games.append(game)
 
     run = True
