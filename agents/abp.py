@@ -1,7 +1,7 @@
 import copy
 import math
 
-class MINMAXPlayer:
+class ABPPlayer:
     def __init__(self, color, depth=3):
         self.color = color
         self.depth = depth
