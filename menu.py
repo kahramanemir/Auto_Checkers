@@ -1,8 +1,24 @@
 import dearpygui.dearpygui as dpg
 
+def get_screen_size():
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        return root.winfo_screenwidth(), root.winfo_screenheight()
+    except Exception:
+        return 800, 800
+
 def show_ai_menu():
     dpg.create_context()
-    dpg.create_viewport(title='AI Configuration', width=800, height=800)
+
+    menu_width = 800
+    menu_height = 800
+    screen_width, screen_height = get_screen_size()
+    x = (screen_width - menu_width) // 2
+    y = (screen_height - menu_height) // 2
+
+    dpg.create_viewport(title='AI Configuration', width=menu_width, height=menu_height, x_pos=x, y_pos=y)
 
     config = {
         "white_alg": "ABP",
@@ -34,7 +50,7 @@ def show_ai_menu():
         dpg.configure_item("black_abp_depth", show=(alg == "ABP"))
         dpg.configure_item("black_mcts_sims", show=(alg == "MCTS"))
 
-    with dpg.window(label="Configure AI Parameters", width=780, height=760):
+    with dpg.window(label="Configure AI Parameters", width=800, height=800):
         dpg.add_text("Note: Increasing depth or simulations may significantly slow down the game.\nPlease keep values reasonable.", color=(255, 100, 100))
         dpg.add_spacer(height=10)
 

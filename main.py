@@ -12,8 +12,6 @@ ROWS, COLS = 1, 1
 SUB_WIDTH = WIDTH // COLS
 SUB_HEIGHT = HEIGHT // ROWS
 
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Parallel Checkers")
 
 class GameInstance:
     def __init__(self, x_idx, y_idx, white_player, black_player):
@@ -105,6 +103,8 @@ def main():
     SUB_HEIGHT = HEIGHT // ROWS
     
     pygame.init()
+    WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Parallel Checkers")
     clock = pygame.time.Clock()
     games = []
 
