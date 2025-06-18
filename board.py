@@ -1,4 +1,3 @@
-# board.py
 import pygame
 import math
 import time
@@ -7,7 +6,7 @@ from constants import *
 class Board:
     def __init__(self):
         self.board = []
-        self.last_move = []  # Artık liste
+        self.last_move = []
         self.create_board()
 
     def create_board(self):

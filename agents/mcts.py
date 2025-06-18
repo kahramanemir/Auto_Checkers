@@ -1,4 +1,3 @@
-# Updated mcts.py
 import copy
 import random
 import math

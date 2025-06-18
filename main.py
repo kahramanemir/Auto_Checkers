@@ -1,11 +1,10 @@
-# main.py
 import pygame
 import random
 import time
 from constants import *
 from board import Board
-from agents.minmax_new1 import MINMAXPlayer
-from agents.mcts_new1 import MCTSPlayer
+from agents.minmax import MINMAXPlayer
+from agents.mcts import MCTSPlayer
 
 NUM_GAMES = 1
 ROWS, COLS = 1, 1
